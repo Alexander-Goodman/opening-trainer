@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#4b6b4f"><meta name="apple-mobile-web-app-capable" content="yes"><meta name="apple-mobile-web-app-status-bar-style" content="default">
+<link rel="manifest" href="manifest.json"><link rel="apple-touch-icon" href="icon-192.png">
+<title>Opening Trainer</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f0e8;color:#20201e;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+.app{max-width:720px;margin:auto;padding:12px 12px 28px}.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.brand{font-size:23px;font-weight:850}.streak{background:#fffdf8;padding:8px 12px;border-radius:18px;font-weight:750}
+.card{background:#fffdf8;border-radius:18px;padding:12px;box-shadow:0 5px 22px #0000000b;margin-bottom:12px}.small{font-size:12px;color:#777}.title{font-size:22px;font-weight:850;margin:3px 0 10px}
+.board{display:grid;grid-template-columns:repeat(8,1fr);aspect-ratio:1;border:4px solid #4f4135;border-radius:10px;overflow:hidden;touch-action:none}.sq{display:flex;align-items:center;justify-content:center;font-size:clamp(30px,11vw,62px);position:relative;user-select:none}.l{background:#ead9bd}.d{background:#896d50}.sel{box-shadow:inset 0 0 0 5px #e3b839}.legal:after{content:"";width:18%;height:18%;background:#0004;border-radius:50%;position:absolute}
+.controls{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:9px}button{border:0;border-radius:11px;padding:11px 9px;background:#e9e5dc;font-weight:750;font-size:14px}button.primary{background:#4b6b4f;color:#fff}
+.result{padding:12px;border-radius:13px;background:#f1eee6;line-height:1.45;margin-top:10px}.good{background:#e5f0e7}.bad{background:#f6e3de}.tag{font-size:11px;font-weight:850;padding:5px 7px;border-radius:7px;background:#dceadd;color:#365f3b}.tag.bad{background:#efd0c8;color:#84382e}.score{font-size:27px;font-weight:900}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}.metric{background:#f1eee6;border-radius:11px;padding:10px}.metric b{display:block;font-size:20px}.progress{height:7px;background:#e4dfd5;border-radius:9px;overflow:hidden}.bar{height:100%;width:0;background:#4b6b4f}.engine{font-size:12px;font-weight:700;margin:8px 2px}.pv{font:11px ui-monospace,monospace;color:#777;word-break:break-word;margin-top:5px}
+.nav{display:flex;gap:7px}.nav button{flex:1}.hidden{display:none}
+@media(min-width:800px){.app{padding-top:24px}.controls{grid-template-columns:repeat(5,1fr)}}
+</style></head>
+<body><div class="app">
+<div class="top"><div class="brand">♟ Opening Trainer</div><div class="streak">🔥 7</div></div>
+
+<div class="card">
+<div class="small" id="posTitle">Итальянская партия · позиция 1/8</div>
+<div class="title">Ваш ход — затем разбор</div>
+<div id="board" class="board"></div>
+<div class="controls">
+<button onclick="undo()">← Отменить</button><button onclick="nextPos()">Следующая →</button><button onclick="flip()">↕ Доска</button><button onclick="hint()">💡 Подсказка</button><button class="primary" onclick="why()">❓ Почему?</button>
+</div>
+<div class="engine">● <span id="status">Stockfish загружается…</span> <span id="eval"></span></div>
+<div id="feedback" class="result">Выберите фигуру и сделайте ход.</div><div id="pv" class="pv"></div>
+<div class="small" style="margin-top:9px">Прогресс</div><div class="progress"><div id="bar" class="bar"></div></div>
+</div>
+
+<div class="card">
+<div class="small">🎯 Сегодня · 15 минут</div><h2 style="margin:3px 0">Разбор</h2>
+<div id="whybox" class="result">После анализа здесь появится лучший ход, разница и объяснение шахматной идеи.</div>
+<div class="grid">
+<div class="metric"><span class="small">Позиции</span><b id="done">0/8</b></div><div class="metric"><span class="small">Точность</span><b id="acc">0%</b></div>
+<div class="metric"><span class="small">Ошибки</span><b id="mist">0</b></div><div class="metric"><span class="small">Уровень</span><b>Opening 4</b></div>
+</div>
+</div>
+
+<div class="card">
+<h3 style="margin:0 0 8px">Режимы</h3>
+<div class="nav"><button onclick="alert('Угадай ход: следующий режим разработки.')">🎯 Угадай ход</button><button onclick="alert('Exam Mode: без подсказок.')">📝 Exam</button><button onclick="alert('Повторение ошибок: следующий режим разработки.')">🔁 Ошибки</button></div>
+</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/stockfish.wasm@0.10.0/stockfish.js"></script>
+<script type="module">
+import {Chess} from "https://esm.sh/chess.js@1.4.0";
+const FENS=[
+"rnbqkbnr/pppp1ppp/8/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 3",
+"r1bqkbnr/pppp1ppp/2n5/4p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 2 3",
+"r1bqk2r/pppp1ppp/2n2n2/2b1p3/4P3/5N2/PPPP1PPP/RNBQKB1R w KQkq - 4 4",
+"r1bqk2r/pppp1ppp/2n2n2/2b1p3/4P3/3P1N2/PPP2PPP/RNBQKB1R b KQkq - 0 4",
+"r1bqk2r/pppp1ppp/2n2n2/2b1p3/4P3/3P1N2/PPP2PPP/RNBQ1RK1 b kq - 0 5",
+"r1bqk2r/pppp1ppp/2n2n2/2b1p3/4P3/3P1N2/PPP2PPP/RNBQ1RK1 w kq - 1 6",
+"r1bqk2r/pppp1ppp/2n2n2/2b1p3/4P3/3P1N2/PPP2PPP/RNBQ1RK1 w kq - 1 6",
+"r1bqk2r/pppp1ppp/2n2n2/2b1p3/4P3/3P1N2/PPP2PPP/RNBQ1RK1 b kq - 1 6"];
+const glyph={p:"♟",n:"♞",b:"♝",r:"♜",q:"♛",k:"♚",P:"♙",N:"♘",B:"♗",R:"♖",Q:"♕",K:"♔"};
+let game=new Chess(FENS[0]),idx=0,selected=null,flipped=false,engine=null,ready=false,best=null,stats={done:0,good:0,bad:0};
+function render(){const b=document.getElementById("board");b.innerHTML="";
+for(let r=0;r<8;r++)for(let c=0;c<8;c++){let rr=flipped?7-r:r,cc=flipped?7-c:c,sq=String.fromCharCode(97+cc)+(8-rr),d=document.createElement("div");d.className="sq "+((rr+cc)%2?"d":"l");
+let p=game.get(sq);if(p)d.textContent=glyph[p.color==="w"?p.type.toUpperCase():p.type];if(selected===sq)d.classList.add("sel");if(selected&&game.moves({square:selected,verbose:true}).some(x=>x.to===sq))d.classList.add("legal");d.onclick=()=>click(sq);b.appendChild(d)}
+document.getElementById("posTitle").textContent="Итальянская партия · позиция "+(idx+1)+"/"+FENS.length;document.getElementById("done").textContent=stats.done+"/"+FENS.length;let a=stats.done?Math.round(stats.good/stats.done*100):0;document.getElementById("acc").textContent=a+"%";document.getElementById("bar").style.width=(idx/(FENS.length-1)*100)+"%"}
+function click(sq){let p=game.get(sq);if(!selected&&p&&p.color===game.turn()){selected=sq;render();return}if(selected){try{let m=game.move({from:selected,to:sq,promotion:"q"});selected=null;render();stats.done=Math.min(FENS.length,stats.done+1);document.getElementById("feedback").innerHTML="<b>Ваш ход: "+m.san+"</b><br>Stockfish анализирует…";analyze()}catch(e){selected=p&&p.color===game.turn()?sq:null;render()}}}
+function start(){try{engine=Stockfish();engine.addMessageListener(x=>{if(typeof x!=="string")return;if(x==="uciok")engine.postMessage("isready");if(x==="readyok"){ready=true;document.getElementById("status").textContent="Stockfish подключён";analyze()}if(x.startsWith("info")&&x.includes(" score ")){let m=x.match(/score (cp|mate) (-?\\d+)/),p=x.match(/ pv (.+)$/);if(m)document.getElementById("eval").textContent=" · "+(m[1]==="mate"?"M"+m[2]:(+m[2]/100).toFixed(2));if(p)document.getElementById("pv").textContent="PV: "+p[1]}if(x.startsWith("bestmove")){best=x.split(" ")[1]||null;document.getElementById("whybox").innerHTML="<b>Лучший ход Stockfish:</b> "+(best||"—")+"<p>Далее учебный слой сравнивает ваш ход с лучшим и объясняет разницу человеческим языком.</p>"}});engine.postMessage("uci")}catch(e){document.getElementById("status").textContent="Stockfish недоступен — нужен интернет."}}
+function analyze(){if(!ready)return;best=null;engine.postMessage("stop");engine.postMessage("position fen "+game.fen());engine.postMessage("go depth 14")}
+function why(){document.getElementById("whybox").innerHTML=best?"<b>Лучший ход:</b> "+best+"<p>Смотрите не только на оценку: лучший ход обычно связан с развитием фигур, контролем центра, безопасностью короля, темпом или конкретной тактической угрозой.</p>":"Подождите завершения анализа."}
+function hint(){document.getElementById("feedback").innerHTML="<span class='tag'>💡 Подсказка</span><p>Ищите ход, который улучшает фигуру и одновременно помогает выполнить план дебюта.</p>"}
+function undo(){try{game.undo();selected=null;render();analyze()}catch(e){}}
+function nextPos(){idx=(idx+1)%FENS.length;game.load(FENS[idx]);selected=null;document.getElementById("feedback").textContent="Новая позиция. Сначала подумайте.";render();analyze()}
+function flip(){flipped=!flipped;render()}
+window.undo=undo;window.nextPos=nextPos;window.flip=flip;window.why=why;window.hint=hint;render();start();
+</script></body></html>
