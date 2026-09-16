@@ -1,8 +1,13 @@
-# Opening Trainer — iPhone PWA
+# Opening Trainer v2
 
-1. Разместите папку на HTTPS-хостинге (например GitHub Pages).
-2. Откройте ссылку на iPhone в Safari.
-3. Нажмите «Поделиться» → «На экран Домой».
-4. Приложение откроется в отдельном окне.
+Mobile-first chess opening trainer for GitHub Pages.
 
-Stockfish и chess.js пока загружаются из CDN, поэтому для анализа нужен интернет.
+Files:
+- index.html
+- manifest.json
+- sw.js
+- icon-192.png
+- icon-512.png
+
+Publish with GitHub Pages from `main` / root.
+The current prototype uses chess.js and Stockfish from CDN, so internet is required for engine analysis.

@@ -1,11 +1,10 @@
 {
   "name": "Opening Trainer",
-  "short_name": "Openings",
-  "start_url": ".",
+  "short_name": "Opening Trainer",
+  "start_url": "./",
   "display": "standalone",
   "background_color": "#f3f0e8",
   "theme_color": "#4b6b4f",
-  "lang": "ru",
   "icons": [
     {
       "src": "icon-192.png",
