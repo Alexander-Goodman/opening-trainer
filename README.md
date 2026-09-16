@@ -1,11 +1,9 @@
-# Opening Trainer v3
+# Opening Trainer v4
 
-Mobile-first chess opening trainer for GitHub Pages.
+- Fixed 8x8 mobile board.
+- Stockfish 18 Lite Single is launched in a dedicated Web Worker.
+- Player move is compared with the engine recommendation.
+- PWA icons included.
+- Service-worker cache updated.
 
-- Correct 8×8 mobile board.
-- Stockfish 18 lite single-threaded browser engine.
-- Player move compared with the engine recommendation.
-- Simple result: excellent / inaccuracy.
-- PWA icons and cache included.
-
-Stockfish is loaded from a fixed UNPKG package URL; internet is required for the engine. The lite single-threaded build is intended for browser use and avoids the cross-origin isolation requirements of multi-threaded builds.
+Internet is required for the engine because the Worker imports the fixed Stockfish build from UNPKG.

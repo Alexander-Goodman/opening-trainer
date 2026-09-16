@@ -87,7 +87,6 @@ button.primary{background:#4b6b4f;color:#fff}
   </div>
 </div>
 
-<script src="https://unpkg.com/stockfish@18.0.8/bin/stockfish-18-lite-single.js"></script>
 <script type="module">
 import {Chess} from "https://esm.sh/chess.js@1.4.0";
 
@@ -157,28 +156,39 @@ function click(sq){
 
 function start(){
  try{
-  Stockfish().then(sf=>{
-   engine=sf;
-   engine.addMessageListener(line=>{
-    if(typeof line!=="string")return;
-    if(line==="uciok"){engine.postMessage("isready");return;}
-    if(line==="readyok"){ready=true;document.getElementById("status").textContent="Stockfish подключён";analyze();return;}
-    if(line.startsWith("info")&&line.includes(" score ")){
-     const m=line.match(/score (cp|mate) (-?\d+)/),pv=line.match(/ pv (.+)$/);
-     if(m){bestScore=m[1]==="mate"?(+m[2]>0?999:-999):(+m[2]/100);document.getElementById("eval").textContent=" · "+(m[1]==="mate"?"M"+m[2]:bestScore.toFixed(2));}
-     if(pv)document.getElementById("pv").textContent="PV: "+pv[1];
+  engine=new Worker("./stockfish-worker.js");
+  engine.onmessage=(event)=>{
+   const line=typeof event.data==="string"?event.data:"";
+   if(line==="uciok"){engine.postMessage("isready");return;}
+   if(line==="readyok"){
+    ready=true;
+    document.getElementById("status").textContent="Stockfish подключён";
+    analyze();return;
+   }
+   if(line.startsWith("info")&&line.includes(" score ")){
+    const m=line.match(/score (cp|mate) (-?\d+)/),pv=line.match(/ pv (.+)$/);
+    if(m){
+     bestScore=m[1]==="mate"?(+m[2]>0?999:-999):(+m[2]/100);
+     document.getElementById("eval").textContent=" · "+(m[1]==="mate"?"M"+m[2]:bestScore.toFixed(2));
     }
-    if(line.startsWith("bestmove")){
-     best=(line.split(/\s+/)[1]||"").trim();analyzing=false;
-     document.getElementById("status").textContent="Stockfish готов";
-     document.getElementById("whybox").innerHTML=best
-      ? `<b>Лучший ход:</b> ${uciToSan(best)}<p>Ищите идею хода: развитие, центр, рокировка, угроза или выигрыш темпа.</p>`
-      : "Анализ завершён.";
-    }
-   });
-   engine.postMessage("uci");
-  }).catch(()=>document.getElementById("status").textContent="Stockfish не загрузился.");
- }catch(e){document.getElementById("status").textContent="Stockfish не загрузился.";}
+    if(pv)document.getElementById("pv").textContent="PV: "+pv[1];
+   }
+   if(line.startsWith("bestmove")){
+    best=(line.split(/\s+/)[1]||"").trim();analyzing=false;
+    document.getElementById("status").textContent="Stockfish готов";
+    document.getElementById("whybox").innerHTML=best
+     ? `<b>Лучший ход:</b> ${uciToSan(best)}<p>Ищите идею: развитие, центр, рокировка, угроза или выигрыш темпа.</p>`
+     : "Анализ завершён.";
+   }
+  };
+  engine.onerror=()=>{
+   ready=false;
+   document.getElementById("status").textContent="Ошибка Stockfish Worker.";
+  };
+  engine.postMessage("uci");
+ }catch(e){
+  document.getElementById("status").textContent="Stockfish не запустился.";
+ }
 }
 
 function analyze(){
