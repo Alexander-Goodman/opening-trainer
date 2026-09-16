@@ -156,7 +156,11 @@ function click(sq){
 
 function start(){
  try{
-  engine=new Worker("./stockfish-worker.js");
+  const wasmUrl="https://unpkg.com/stockfish@18.0.8/bin/stockfish-18-lite-single.wasm";
+  const jsUrl="https://unpkg.com/stockfish@18.0.8/bin/stockfish-18-lite-single.js";
+  const blobCode=`importScripts("${jsUrl}");`;
+  const blobUrl=URL.createObjectURL(new Blob([blobCode],{type:"application/javascript"}));
+  engine=new Worker(blobUrl+"#"+encodeURIComponent(wasmUrl)+",worker");
   engine.onmessage=(event)=>{
    const line=typeof event.data==="string"?event.data:"";
    if(line==="uciok"){engine.postMessage("isready");return;}
@@ -177,13 +181,13 @@ function start(){
     best=(line.split(/\s+/)[1]||"").trim();analyzing=false;
     document.getElementById("status").textContent="Stockfish готов";
     document.getElementById("whybox").innerHTML=best
-     ? `<b>Лучший ход:</b> ${uciToSan(best)}<p>Ищите идею: развитие, центр, рокировка, угроза или выигрыш темпа.</p>`
-     : "Анализ завершён.";
+      ? `<b>Лучший ход:</b> ${uciToSan(best)}<p>Ищите идею: развитие, центр, рокировка, угроза или выигрыш темпа.</p>`
+      : "Анализ завершён.";
    }
   };
   engine.onerror=()=>{
    ready=false;
-   document.getElementById("status").textContent="Ошибка Stockfish Worker.";
+   document.getElementById("status").textContent="Ошибка запуска Stockfish.";
   };
   engine.postMessage("uci");
  }catch(e){
