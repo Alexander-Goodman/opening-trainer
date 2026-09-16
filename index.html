@@ -87,11 +87,11 @@ button.primary{background:#4b6b4f;color:#fff}
   </div>
 </div>
 
-<script src="https://cdn.jsdelivr.net/npm/stockfish.wasm@0.10.0/stockfish.js"></script>
+<script src="https://unpkg.com/stockfish@18.0.8/bin/stockfish-18-lite-single.js"></script>
 <script type="module">
 import {Chess} from "https://esm.sh/chess.js@1.4.0";
 
-const FENS = [
+const FENS=[
  "r1bqkbnr/pppp1ppp/2n5/4p3/2B1P3/5N2/PPPP1PPP/RNBQK2R b KQkq - 2 3",
  "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/5N2/PPPP1PPP/RNBQK2R w KQkq - 4 4",
  "r1bqk2r/pppp1ppp/2n2n2/2b1p3/2B1P3/2P2N2/PP3PPP/RNBQK2R b KQkq - 0 4",
@@ -101,118 +101,108 @@ const FENS = [
  "r1bq1rk1/ppp2ppp/2nppn2/2b5/2B1P3/2P2N2/PP3PPP/RNBQ1RK1 w - - 2 7",
  "r1bq1rk1/ppp2ppp/2nppn2/2b5/2B1P3/2P2N2/PP3PPP/RNBQ1RK1 b - - 2 7"
 ];
-
 const glyph={p:"♟",n:"♞",b:"♝",r:"♜",q:"♛",k:"♚",P:"♙",N:"♘",B:"♗",R:"♖",Q:"♕",K:"♔"};
-let idx=0, game=new Chess(FENS[0]), selected=null, flipped=false, lastMove=null;
-let engine=null, ready=false, best=null;
+let idx=0,game=new Chess(FENS[0]),selected=null,flipped=false,lastMove=null;
+let engine=null,ready=false,best=null,bestScore=null,analyzing=false;
 let stats={done:0,good:0,bad:0};
 
 function render(){
-  const b=document.getElementById("board");
-  b.innerHTML="";
-  for(let r=0;r<8;r++){
-    for(let c=0;c<8;c++){
-      const rr=flipped?7-r:r, cc=flipped?7-c:c;
-      const sq=String.fromCharCode(97+cc)+(8-rr);
-      const d=document.createElement("div");
-      d.className="sq "+(((rr+cc)%2)?"d":"l");
-      if(lastMove && (sq===lastMove.from || sq===lastMove.to)) d.classList.add("last");
-      const p=game.get(sq);
-      if(p){
-        const span=document.createElement("span");
-        span.className="piece "+(p.color==="w"?"white":"black");
-        span.textContent=glyph[p.color==="w"?p.type.toUpperCase():p.type];
-        d.appendChild(span);
-      }
-      if(selected===sq) d.classList.add("sel");
-      if(selected && game.moves({square:selected,verbose:true}).some(x=>x.to===sq)) d.classList.add("legal");
-      d.onclick=()=>click(sq);
-      b.appendChild(d);
-    }
-  }
-  document.getElementById("posTitle").textContent=`Итальянская партия · позиция ${idx+1}/${FENS.length}`;
-  document.getElementById("done").textContent=`${stats.done}/${FENS.length}`;
-  document.getElementById("acc").textContent=(stats.done?Math.round(stats.good/stats.done*100):0)+"%";
-  document.getElementById("mist").textContent=stats.bad;
-  document.getElementById("bar").style.width=Math.round(idx/(FENS.length-1)*100)+"%";
+ const b=document.getElementById("board"); b.innerHTML="";
+ for(let r=0;r<8;r++)for(let c=0;c<8;c++){
+  const rr=flipped?7-r:r,cc=flipped?7-c:c,sq=String.fromCharCode(97+cc)+(8-rr);
+  const d=document.createElement("div");d.className="sq "+(((rr+cc)%2)?"d":"l");
+  if(lastMove&&(sq===lastMove.from||sq===lastMove.to))d.classList.add("last");
+  const p=game.get(sq);
+  if(p){const s=document.createElement("span");s.className="piece "+(p.color==="w"?"white":"black");s.textContent=glyph[p.color==="w"?p.type.toUpperCase():p.type];d.appendChild(s);}
+  if(selected===sq)d.classList.add("sel");
+  if(selected&&game.moves({square:selected,verbose:true}).some(x=>x.to===sq))d.classList.add("legal");
+  d.onclick=()=>click(sq);b.appendChild(d);
+ }
+ document.getElementById("posTitle").textContent=`Итальянская партия · позиция ${idx+1}/${FENS.length}`;
+ document.getElementById("done").textContent=`${stats.done}/${FENS.length}`;
+ document.getElementById("acc").textContent=(stats.done?Math.round(stats.good/stats.done*100):0)+"%";
+ document.getElementById("mist").textContent=stats.bad;
+ document.getElementById("bar").style.width=Math.round(idx/(FENS.length-1)*100)+"%";
+}
+
+function uciToSan(uci,fen=game.fen()){
+ if(!uci||uci.length<4)return uci||"—";
+ try{const t=new Chess(fen);const m=t.move({from:uci.slice(0,2),to:uci.slice(2,4),promotion:uci[4]||"q"});return m?m.san:uci;}catch(e){return uci;}
 }
 
 function click(sq){
-  const p=game.get(sq);
-  if(!selected){
-    if(p && p.color===game.turn()){selected=sq;render();}
-    return;
+ const p=game.get(sq);
+ if(!selected){if(p&&p.color===game.turn()){selected=sq;render();}return;}
+ if(sq===selected){selected=null;render();return;}
+ try{
+  const preFen=game.fen(),preBest=best;
+  const m=game.move({from:selected,to:sq,promotion:"q"});
+  selected=null;lastMove={from:m.from,to:m.to};
+  stats.done=Math.min(FENS.length,stats.done+1);
+  let label="Допустимо",cls="";
+  if(preBest){
+   const played=m.from+m.to+(m.promotion||"");
+   if(played===preBest){label="Отлично";stats.good++;cls="good";}
+   else{label="Неточность";stats.bad++;cls="bad";}
   }
-  if(sq===selected){selected=null;render();return;}
-  try{
-    const m=game.move({from:selected,to:sq,promotion:"q"});
-    selected=null; lastMove={from:m.from,to:m.to};
-    stats.done=Math.min(FENS.length,stats.done+1);
-    document.getElementById("feedback").innerHTML=`<b>Ваш ход: ${m.san}</b><br>Идёт анализ позиции…`;
-    render(); analyze();
-  }catch(e){
-    selected=p&&p.color===game.turn()?sq:null; render();
-  }
+  const rec=preBest?uciToSan(preBest,preFen):"—";
+  document.getElementById("feedback").className="result "+cls;
+  document.getElementById("feedback").innerHTML=`<b>${label}: ${m.san}</b><br>Рекомендация: <b>${rec}</b><br><span class="small">Сравниваем ход с лучшим решением позиции.</span>`;
+  document.getElementById("whybox").innerHTML=preBest
+   ? `<b>Почему?</b><p>В этой позиции двигатель считает <b>${rec}</b> лучшим продолжением. В дебюте смотрим прежде всего на развитие, центр, безопасность короля и темпы.</p>`
+   : "Анализ позиции ещё не готов.";
+  render();setTimeout(()=>analyze(),80);
+ }catch(e){selected=p&&p.color===game.turn()?sq:null;render();}
 }
 
 function start(){
-  try{
-    engine=Stockfish();
-    engine.addMessageListener(x=>{
-      if(typeof x!=="string") return;
-      if(x==="uciok") engine.postMessage("isready");
-      if(x==="readyok"){
-        ready=true;
-        document.getElementById("status").textContent="Stockfish подключён";
-        analyze();
-      }
-      if(x.startsWith("info") && x.includes(" score ")){
-        const m=x.match(/score (cp|mate) (-?\d+)/);
-        const p=x.match(/ pv (.+)$/);
-        if(m) document.getElementById("eval").textContent=" · "+(m[1]==="mate"?"M"+m[2]:(+m[2]/100).toFixed(2));
-        if(p) document.getElementById("pv").textContent="PV: "+p[1];
-      }
-      if(x.startsWith("bestmove")){
-        best=x.split(" ")[1]||null;
-        document.getElementById("whybox").innerHTML=best
-          ? `<b>Лучший ход Stockfish:</b> ${best}<p>Сравним его с вашим ходом и разберём идею: развитие, центр, безопасность короля, темп или тактическая угроза.</p>`
-          : "Анализ завершён.";
-      }
-    });
-    engine.postMessage("uci");
-  }catch(e){
-    document.getElementById("status").textContent="Stockfish недоступен — нужен интернет.";
-  }
+ try{
+  Stockfish().then(sf=>{
+   engine=sf;
+   engine.addMessageListener(line=>{
+    if(typeof line!=="string")return;
+    if(line==="uciok"){engine.postMessage("isready");return;}
+    if(line==="readyok"){ready=true;document.getElementById("status").textContent="Stockfish подключён";analyze();return;}
+    if(line.startsWith("info")&&line.includes(" score ")){
+     const m=line.match(/score (cp|mate) (-?\d+)/),pv=line.match(/ pv (.+)$/);
+     if(m){bestScore=m[1]==="mate"?(+m[2]>0?999:-999):(+m[2]/100);document.getElementById("eval").textContent=" · "+(m[1]==="mate"?"M"+m[2]:bestScore.toFixed(2));}
+     if(pv)document.getElementById("pv").textContent="PV: "+pv[1];
+    }
+    if(line.startsWith("bestmove")){
+     best=(line.split(/\s+/)[1]||"").trim();analyzing=false;
+     document.getElementById("status").textContent="Stockfish готов";
+     document.getElementById("whybox").innerHTML=best
+      ? `<b>Лучший ход:</b> ${uciToSan(best)}<p>Ищите идею хода: развитие, центр, рокировка, угроза или выигрыш темпа.</p>`
+      : "Анализ завершён.";
+    }
+   });
+   engine.postMessage("uci");
+  }).catch(()=>document.getElementById("status").textContent="Stockfish не загрузился.");
+ }catch(e){document.getElementById("status").textContent="Stockfish не загрузился.";}
 }
 
 function analyze(){
-  if(!ready)return;
-  best=null;
-  engine.postMessage("stop");
-  engine.postMessage("position fen "+game.fen());
-  engine.postMessage("go depth 14");
+ if(!ready||!engine||analyzing)return;
+ best=null;bestScore=null;analyzing=true;
+ engine.postMessage("stop");engine.postMessage("position fen "+game.fen());engine.postMessage("go depth 13");
 }
 function why(){
-  document.getElementById("whybox").innerHTML=best
-    ? `<b>Лучший ход:</b> ${best}<p>Смысл хода нужно искать в плане позиции: развитие фигур, борьба за центр, рокировка, создание угроз или предотвращение плана соперника.</p>`
-    : "Подождите завершения анализа.";
+ document.getElementById("whybox").innerHTML=best
+  ? `<b>Лучший ход:</b> ${uciToSan(best)}<p>Смысл: развитие фигур, контроль центра, безопасность короля и создание плана.</p>`
+  : "Подождите завершения анализа.";
 }
-function hint(){
-  document.getElementById("feedback").innerHTML="<span class='tag'>💡 Подсказка</span><p>Сначала ищите развитие фигур, контроль центра и безопасность короля.</p>";
-}
-function undo(){
-  try{game.undo();selected=null;lastMove=null;render();analyze();}catch(e){}
-}
+function hint(){document.getElementById("feedback").innerHTML="<span class='tag'>💡 Подсказка</span><p>Сначала проверьте развитие фигур, центр и возможность рокировки.</p>";}
+function undo(){try{game.undo();selected=null;lastMove=null;render();setTimeout(analyze,50);}catch(e){}}
 function nextPos(){
-  idx=(idx+1)%FENS.length;
-  game.load(FENS[idx]); selected=null; lastMove=null;
-  document.getElementById("feedback").textContent="Новая позиция. Сначала подумайте.";
-  document.getElementById("whybox").textContent="После анализа здесь появится лучший ход.";
-  render(); analyze();
+ idx=(idx+1)%FENS.length;game.load(FENS[idx]);selected=null;lastMove=null;
+ document.getElementById("feedback").className="result";
+ document.getElementById("feedback").textContent="Новая позиция. Сначала подумайте.";
+ document.getElementById("whybox").textContent="После анализа здесь появится лучший ход.";
+ render();setTimeout(analyze,50);
 }
 function flip(){flipped=!flipped;render();}
 window.undo=undo;window.nextPos=nextPos;window.flip=flip;window.why=why;window.hint=hint;
-render(); start();
+render();start();
 </script>
 </body>
 </html>
